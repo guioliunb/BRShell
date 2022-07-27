@@ -296,7 +296,7 @@ int main(void)
 			 for (int i = 0; i < commands->cmd_count; i++)
 			 {
 			     fprintf(stdout, "command: ");
-				 fprintf(stdout,"%s with %d", commands->cmds[i]->name,  commands->cmds[i]->argc);
+				 fprintf(stdout,"%s with %d args", commands->cmds[i]->name,  commands->cmds[i]->argc);
 			 }
 
 			int historico_numero = 0;
