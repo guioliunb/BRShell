@@ -4,14 +4,14 @@
 #include <errno.h>
 #include <unistd.h>
 #include <sys/types.h>
-#include <ctype.h>
-#include <iostream>
+#include <sys/wait.h>
+#include <signal.h>
 #include "HelloShell.h"
-#include <bits/stdc++.h>
+
 
 static char **history = NULL; /* array of strings for storing history */
 static int history_len = 0;
-using namespace std;
+
 
 struct command *parse(char *input);
 int is_blank(char *input);
@@ -37,13 +37,18 @@ int is_blank(char *input)
 {
 	int n = (int)strlen(input);
 	int i;
+	int contador = 0;
 
 	for (i = 0; i < n; i++)
 	{
-		if (!isspace(input[i]))
-			return 0;
+		if (input[i] == ' ')
+			contador++;
 	}
-	return 1;
+	
+	if(contador == n)
+		return 1;
+	else
+		return 0;
 }
 
 void cleanup_and_exit(int status)
@@ -71,7 +76,7 @@ struct commands *parse_commands_with_pipes(char *input)
 
 	commandCount++;
 
-	cmds = (commands *)calloc(sizeof(commands) + commandCount * sizeof(command *), 1);
+	cmds = (struct commands *)calloc(sizeof(struct commands) + commandCount * sizeof(struct commands *), 1);
 
 	if (cmds == NULL)
 	{
@@ -96,7 +101,7 @@ struct command *parse(char *input)
 	int tokenCount = 0;
 	char *token;
 
-	struct command *cmd = (command *)calloc(sizeof(struct command) + ARG_MAX_COUNT * sizeof(char *), 1);
+	struct command *cmd = (struct command *)calloc(sizeof(struct command) + ARG_MAX_COUNT * sizeof(char *), 1);
 
 	if (cmd == NULL)
 	{
@@ -185,14 +190,80 @@ int add_to_history(char *input)
 	return 1;
 }
 
+void check_built_in(struct command *cmd)
+{
+	if(strcmp(cmd->name, "exit") == 0)
+		exit(0);
+	else if (strcmp(cmd->name, "cd") == 0 ){
+		chdir(cmd->argv[1]);
+	}
+}
+
+int exec_command(struct commands *cmds, struct command *cmd, int (*pipes)[2]){
+
+
+	pid_t pid = fork();
+	if(pid >0){
+		wait(NULL);
+	}else{
+		//child
+		execvp(cmd->argv[0],cmd->argv);
+		//in case exec is not successfull, exit
+		
+	}
+
+	return pid;
+}
+
+int exec_commands(struct commands* cmds){
+
+	int pid;
+
+	if(cmds->cmd_count == 1){
+		//SET I/O
+		cmds->cmds[0]->fds[STDIN_FILENO] = STDIN_FILENO;
+		cmds->cmds[0]->fds[STDOUT_FILENO] = STDOUT_FILENO;
+
+		pid = exec_command(cmds, cmds->cmds[0], NULL);
+		wait(NULL);
+	}
+
+
+	return pid;
+}
+
+void shellPrompt(){
+	// We print the prompt in the form "<user>@<host> <cwd> >"
+	char hostn[1204] = "";
+	gethostname(hostn, sizeof(hostn));
+	//printf("%s@%s %s > ", getenv("LOGNAME"), hostn, getcwd(currentDirectory, 1024));
+}
+
+void welcomeScreen(){
+        printf("\n\t============================================\n");
+        printf("\t               Simple C Shell\n");
+        printf("\t--------------------------------------------\n");
+        printf("\t             Aluno: Guilherme Oliveira L\n");
+        printf("\t============================================\n");
+        printf("\n\n");
+}
+
 int main(void)
 {
 	int exec_ret;
 	char c;
 
+	welcomeScreen();
+
 	while (1)
 	{
-		fputs("BRsh - User->", stdout);
+
+		char cwd[1024];
+		if (getcwd(cwd, sizeof(cwd)) != NULL)
+		fprintf(stdout,"%s",cwd);
+		else 	perror("User path failed\n");
+
+		fputs("$ ", stdout);
 
 		input = read_input();
 
@@ -209,16 +280,30 @@ int main(void)
 		//     i++;
 		// }
 
+		// fprintf(stdout, "%d\n", strlen(input));
+		// fprintf(stdout, "negado %d\n", is_blank(input));
+		// fprintf(stdout, "%c\n", input[0]);
+
 		if (strlen(input) > 0 && !is_blank(input) && input[0])
 		{
-			string linecopy = strdup(input);
+			//char* linecopy = strdup(input);
+
+			// fprintf(stdout, "entrou aqui\n");
 
 			add_to_history(input);
 
 			struct commands *commands = parse_commands_with_pipes(input);
+			 for (int i = 0; i < commands->cmd_count; i++)
+			 {
+			     fprintf(stdout, "command: ");
+				 fprintf(stdout,"%s with %d", commands->cmds[i]->name,  commands->cmds[i]->argc);
+			 }
 
 			int historico_numero = 0;
+			check_built_in(commands->cmds[0]);
 
+
+			//caso seja historico 
 			if(historico(commands->cmds[0]->name)){
 
 				if(commands->cmds[0]->argv[1] != NULL && !is_blank(commands->cmds[0]->argv[1])){
@@ -233,11 +318,10 @@ int main(void)
 
 				for (int i = 0; i < historico_numero; i++)
 				{
-					fprintf(stdout, history[i]);
+					fprintf(stdout,"%s",history[i]);
 					fprintf(stdout, "\n");
 				}
-				
-			}
+
 
 			// if(commands->cmd_count > 1)
 			// 	add_to_history(linecopy);
@@ -260,6 +344,12 @@ int main(void)
 			// 	fprintf(stdout, " >> ");
 			// }
 		}
+		else{
+			
+			exec_ret = exec_commands(commands);
+		}	
+
+		
 
 		free(input);
 
@@ -268,5 +358,7 @@ int main(void)
 			break;
 	}
 
-	return 0;
+	
+}
+
 }
