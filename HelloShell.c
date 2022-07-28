@@ -6,12 +6,16 @@
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <signal.h>
+#include <fcntl.h>
 #include "HelloShell.h"
 
 
 static char **history = NULL; /* array of strings for storing history */
 static int history_len = 0;
 
+#define INPUT 0
+#define OUTPUT 1
+#define APPEND 2
 
 struct command *parse(char *input);
 int is_blank(char *input);
@@ -199,25 +203,114 @@ void check_built_in(struct command *cmd)
 	}
 }
 
+void close_pipes(int (*pipes)[2], int pipe_count)
+{
+	int i;
+
+	for (i = 0; i < pipe_count; i++) {
+		close(pipes[i][0]);
+		close(pipes[i][1]);
+	}
+
+}
+
 int exec_command(struct commands *cmds, struct command *cmd, int (*pipes)[2]){
+	
 
-
-	pid_t pid = fork();
-	if(pid >0){
+	fprintf(stdout,"%s", cmd->name);
+	int pid = fork();
+	if (pid > 0)
 		wait(NULL);
-	}else{
-		//child
-		execvp(cmd->argv[0],cmd->argv);
-		//in case exec is not successfull, exit
-		
+	else{
+		execvp(cmd->name,cmd->argv);
+		exit(EXIT_FAILURE);
 	}
 
 	return pid;
 }
 
+void exec_async(struct commands* cmds){
+	
+}
+
+void exec_append(struct commands* cmds){
+
+	int fd;
+	//TODO: SINCRONIZAR AS ATIVIDADES PARA POSSIBILITAR EXECUÇÃO EM PIPE
+	//TODO: especificar o comando dentro de commmands(strcut)
+	fprintf(stdout, "path %s\n", cmds->cmds[0]->argv[2]);
+	// fprintf(stdout, "path %s\n", cmds->cmds[0]->argv[2]);
+
+	if(fork()==0){
+		//input
+		fd = open(cmds->cmds[0]->argv[2],O_WRONLY | O_APPEND);
+
+		fprintf(stdout, "fd %d\n", fd);
+		
+		dup2(fd,1);
+
+		fprintf(stdout, "fd lalal %d\n", fd);
+		
+		execvp(cmds->cmds[0]->argv[0], cmds->cmds[0]->argv+1);
+	}
+	wait(NULL);
+
+
+}
+
+//working
+void exec_piped(struct commands* cmds){
+
+
+	int numPipes = cmds->cmd_count-1;		
+		int i;
+		int exec;
+
+		cmds->cmds[0]->fds[STDIN_FILENO] = STDIN_FILENO;
+
+		int fd[10][2];
+
+
+		for (i = 0; i < cmds->cmd_count; i++)
+		{
+			if(i!= numPipes)
+				if( pipe(fd[i])	< 0)	
+					fprintf(stderr, "pipe error\n");
+
+			if(fork()==0){//child1
+			if(i!=cmds->cmd_count-1){
+				dup2(fd[i][1],1);
+				close(fd[i][0]);
+				close(fd[i][1]);
+			}
+
+			if(i!=0){
+				dup2(fd[i-1][0],0);
+				close(fd[i-1][1]);
+				close(fd[i-1][0]);
+			}
+			execvp(cmds->cmds[i]->name,cmds->cmds[i]->argv);
+			perror("invalid input ");
+			exit(1);//in case exec is not successfull, exit
+		}
+		//parent
+		if(i!=0){//second process
+			close(fd[i-1][0]);
+			close(fd[i-1][1]);
+		}
+		wait(NULL);
+		}
+
+		return;
+
+	
+}
+
 int exec_commands(struct commands* cmds){
 
 	int pid;
+
+	fprintf(stdout,"\ninput %s :>\ncontador %d",input, cmds->cmd_count);
 
 	if(cmds->cmd_count == 1){
 		//SET I/O
@@ -227,6 +320,12 @@ int exec_commands(struct commands* cmds){
 		pid = exec_command(cmds, cmds->cmds[0], NULL);
 		wait(NULL);
 	}
+	else{
+		
+
+	}
+	
+	
 
 
 	return pid;
@@ -252,6 +351,7 @@ int main(void)
 {
 	int exec_ret;
 	char c;
+	char* input_auxiliar;
 
 	welcomeScreen();
 
@@ -266,6 +366,7 @@ int main(void)
 		fputs("$ ", stdout);
 
 		input = read_input();
+		input_auxiliar = input;
 
 		if (input == NULL)
 		{
@@ -274,36 +375,22 @@ int main(void)
 		}
 		int i = 0;
 
-		// while ( input[i] != '\0')
-		// {
-		//     cout << input[i];
-		//     i++;
-		// }
 
-		// fprintf(stdout, "%d\n", strlen(input));
-		// fprintf(stdout, "negado %d\n", is_blank(input));
-		// fprintf(stdout, "%c\n", input[0]);
+		if(strchr(input, '|'))
+			fprintf(stdout, "%s ", input);
 
 		if (strlen(input) > 0 && !is_blank(input) && input[0])
 		{
-			//char* linecopy = strdup(input);
 
-			// fprintf(stdout, "entrou aqui\n");
 
 			add_to_history(input);
 
 			struct commands *commands = parse_commands_with_pipes(input);
-			 for (int i = 0; i < commands->cmd_count; i++)
-			 {
-			     fprintf(stdout, "command: ");
-				 fprintf(stdout,"%s with %d args", commands->cmds[i]->name,  commands->cmds[i]->argc);
-			 }
-
 			int historico_numero = 0;
+
+			//exit, cd, help
 			check_built_in(commands->cmds[0]);
 
-
-			//caso seja historico 
 			if(historico(commands->cmds[0]->name)){
 
 				if(commands->cmds[0]->argv[1] != NULL && !is_blank(commands->cmds[0]->argv[1])){
@@ -321,33 +408,12 @@ int main(void)
 					fprintf(stdout,"%s",history[i]);
 					fprintf(stdout, "\n");
 				}
+				}
+				else{
+					//exec_piped(commands);
+					exec_append(commands);
 
-
-			// if(commands->cmd_count > 1)
-			// 	add_to_history(linecopy);
-
-			// for (int i = 0; i < commands->cmd_count; i++)
-			// {
-			//     fprintf(stdout, commands->cmds[i]->name);
-			//     fprintf(stdout, " n args: ");
-
-			//     fprintf(stdout, "%d", commands->cmds[i]->argc);
-			//     fprintf(stdout, "  >> \n");
-
-			// }
-
-			// struct command *command = parse(input);
-
-			// for (int i = 0; i < command->argc; i++)
-			// {
-			// 	fprintf(stdout, command->argv[i]);
-			// 	fprintf(stdout, " >> ");
-			// }
-		}
-		else{
-			
-			exec_ret = exec_commands(commands);
-		}	
+				}	
 
 		
 
