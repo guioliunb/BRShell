@@ -9,17 +9,28 @@
 #include <fcntl.h>
 #include "HelloShell.h"
 
+#define GREEN   "\x1b[32m"
+#define RED     "\x1b[31m"
+#define BLUE    "\x1b[34m"
+#define RESET   "\x1b[0m"
 
-static char **history = NULL; /* array of strings for storing history */
+
+static char **history = NULL; 
 static int history_len = 0;
 
 #define INPUT 0
 #define OUTPUT 1
 #define APPEND 2
+#define OPERATION_IN 3
+#define OPERATION_OUT 4
+#define ASYNCRONOUS 5
+#define PWD 6
 
 struct command *parse(char *input);
 int is_blank(char *input);
 static char *input;
+static int* operations;
+static int async_number = 0;
 
 int historico(char* input)
 {
@@ -70,6 +81,10 @@ struct commands *parse_commands_with_pipes(char *input)
 	char *saveptr;
 	char *c = input;
 	struct commands *cmds;
+	operations = (int*) calloc(32,  sizeof(int));
+	int operation_number = 0;
+	
+
 
 	while (*c != '\0')
 	{
@@ -193,14 +208,58 @@ int add_to_history(char *input)
 
 	return 1;
 }
+void showHelp(){
+	printf(BLUE   "----------Help--------"   RESET "\n");
+	printf(BLUE   "Comandos internso: cd, pwd, echo, exit "   RESET "\n");
+	printf(BLUE   "A execução por seções de pipe é permitida utilizando ' | ' entre os comandos"   RESET "\n");
+	printf(BLUE   "Ex. ls -a | wc -c "   RESET "\n");
+	printf(BLUE   "Comandos assincronos podem ser executados com arg[n] =  '&' "   RESET "\n");
+	printf(BLUE   "Ex. ls -a &"   RESET "\n"); 
+	printf(BLUE   "Redirecionar a saída (OUTPUT) para o arquivo: ls > fileOutput "   RESET "\n");
+	printf(BLUE   "Redirecionar o ano (APPEND) para o arquivo: ls >> fileOutput "   RESET "\n");
+	printf(BLUE   "Redirecionar a entrada (INPUT): para o arquivO:  wc -c < fileInput "   RESET "\n");
+}
 
-void check_built_in(struct command *cmd)
+int check_built_in(struct command *cmd)
 {
 	if(strcmp(cmd->name, "exit") == 0)
-		exit(0);
+		return 0;
 	else if (strcmp(cmd->name, "cd") == 0 ){
 		chdir(cmd->argv[1]);
+		return 1;
 	}
+	else if(strcmp(cmd->name, "historico") == 0 ){
+
+		int historico_numero = 0;
+
+		if(cmd->argv[1] != NULL && !is_blank(cmd->argv[1])){
+			historico_numero = atoi(cmd->argv[1]);
+			
+			if(historico_numero > 10 && historico_numero >=0)
+				historico_numero = history_len;
+		}
+		else
+			historico_numero = history_len;
+
+
+		for (int i = 0; i < historico_numero; i++)
+		{
+			fprintf(stdout,"%s",history[i]);
+			fprintf(stdout, "\n");
+		}
+
+		return 1;		
+	}
+	else if(strcmp(cmd->name, "help") == 0 ){
+		showHelp();
+	}
+	else if(strcmp(cmd->name, "ver") == 0 ){
+		fprintf(stdout, GREEN "Versão: 1.0" RESET"\n");
+		fprintf(stdout, GREEN"Data de atualização: 31/08/2022" RESET"\n");
+		fprintf(stdout, GREEN"Autor: Guilherme Oliveira Loiola" RESET"\n");
+	}
+
+	return -1;
 }
 
 void close_pipes(int (*pipes)[2], int pipe_count)
@@ -214,10 +273,9 @@ void close_pipes(int (*pipes)[2], int pipe_count)
 
 }
 
-int exec_command(struct commands *cmds, struct command *cmd, int (*pipes)[2]){
+int exec_command(struct command *cmd){
 	
-
-	fprintf(stdout,"%s", cmd->name);
+	fprintf(stdout,"exc. %s", cmd->name);
 	int pid = fork();
 	if (pid > 0)
 		wait(NULL);
@@ -229,34 +287,112 @@ int exec_command(struct commands *cmds, struct command *cmd, int (*pipes)[2]){
 	return pid;
 }
 
-void exec_async(struct commands* cmds){
-	
+
+//TODO: VOID FUCNTIONS
+void exec_async( char *argv[], int argc ){
+
+	int pid = fork();
+	int size = argc;
+	int number = async_number;
+	async_number++;
+
+	if(pid==0){
+			execvp(argv[0],argv);
+			perror("invalid input ");
+			exit(1);//in case exec is not successfull, exit
+	}else{
+		fprintf(stdout, "Processo em background [%d] executado\n", number);
+
+		fprintf(stdout ,"Comando :");
+
+		for (int i = 0; i < size-1; i++)
+		{
+			fprintf(stdout ,"%s ", argv[i]);
+		}
+
+		fprintf(stdout ,"&\n");
+		
+	}
+
+	wait(NULL);
+
 }
 
-void exec_append(struct commands* cmds){
+int verify_parsing(char * argv){
+
+	if(!strcmp(argv, ">>"))
+	{
+		return APPEND;
+	}else if(!strcmp(argv, ">"))
+	{
+		return OUTPUT;
+	}else if(!strcmp(argv, "<"))
+	{
+		return INPUT;
+	}else if(!strcmp(argv, "pwd"))
+	{
+		return PWD;
+	}
+	else if(!strcmp(argv, "&"))
+	{
+		return ASYNCRONOUS;
+	}
+
+	return -1;
+}
+
+
+void exec_redirect(char* path, char *argv[], int mode){
 
 	int fd;
+	// char *args[] = calloc(cmds->cmd_count-);
 	//TODO: SINCRONIZAR AS ATIVIDADES PARA POSSIBILITAR EXECUÇÃO EM PIPE
 	//TODO: especificar o comando dentro de commmands(strcut)
-	fprintf(stdout, "path %s\n", cmds->cmds[0]->argv[2]);
-	// fprintf(stdout, "path %s\n", cmds->cmds[0]->argv[2]);
+	
+	int pid = fork();
+	mode_t access = S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH;
 
-	if(fork()==0){
+	if(pid==0){
 		//input
-		fd = open(cmds->cmds[0]->argv[2],O_WRONLY | O_APPEND);
-
-		fprintf(stdout, "fd %d\n", fd);
+		fprintf(stdout, "arg name:%s e path: %s\n", argv[0], path);
 		
-		dup2(fd,1);
-
-		fprintf(stdout, "fd lalal %d\n", fd);
+		if(mode == APPEND){
+			fd=open(path,O_RDWR  | O_APPEND| O_CREAT, access);
+		}
+		else if(mode == INPUT){
+			fd=open(path,O_RDONLY, access);
+		}
+		else if(mode == OUTPUT){
+			fd=open(path, O_RDWR | O_CREAT, access);
+		}
 		
-		execvp(cmds->cmds[0]->argv[0], cmds->cmds[0]->argv+1);
+		if(fd<0){
+			perror("cannot open file\n");
+			return;
+		}
+		
+
+		if(mode == APPEND || mode == OUTPUT){
+			dup2(fd,1);
+		}
+		else if(mode == INPUT){
+			dup2(fd,0);
+		}
+
+		close(fd);
+		
+		// execvp(cmds->cmds[0]->name, token);
+		execvp(argv[0], argv);
+		
+		perror("invalid exec\n");
+			return;
 	}
+
 	wait(NULL);
 
 
 }
+
 
 //working
 void exec_piped(struct commands* cmds){
@@ -269,7 +405,6 @@ void exec_piped(struct commands* cmds){
 		cmds->cmds[0]->fds[STDIN_FILENO] = STDIN_FILENO;
 
 		int fd[10][2];
-
 
 		for (i = 0; i < cmds->cmd_count; i++)
 		{
@@ -314,19 +449,13 @@ int exec_commands(struct commands* cmds){
 
 	if(cmds->cmd_count == 1){
 		//SET I/O
+		//TODO:
 		cmds->cmds[0]->fds[STDIN_FILENO] = STDIN_FILENO;
 		cmds->cmds[0]->fds[STDOUT_FILENO] = STDOUT_FILENO;
 
-		pid = exec_command(cmds, cmds->cmds[0], NULL);
+		pid = exec_command(cmds->cmds[0]);
 		wait(NULL);
 	}
-	else{
-		
-
-	}
-	
-	
-
 
 	return pid;
 }
@@ -386,35 +515,51 @@ int main(void)
 			add_to_history(input);
 
 			struct commands *commands = parse_commands_with_pipes(input);
-			int historico_numero = 0;
-
-			//exit, cd, help
-			check_built_in(commands->cmds[0]);
-
-			if(historico(commands->cmds[0]->name)){
-
-				if(commands->cmds[0]->argv[1] != NULL && !is_blank(commands->cmds[0]->argv[1])){
-					historico_numero = atoi(commands->cmds[0]->argv[1]);
-					
-					if(historico_numero > 10 && historico_numero >=0)
-						historico_numero = history_len;
-				}
-				else
-					historico_numero = history_len;
-
-
-				for (int i = 0; i < historico_numero; i++)
+			int operation = 0;
+			int option = 0;
+			
+			
+			//TODO: exit, cd, help
+			for (int count = i = 0; i < commands->cmd_count; i++)
+			{
+				count = check_built_in(commands->cmds[i]);
+				if (count != -1)
 				{
-					fprintf(stdout,"%s",history[i]);
-					fprintf(stdout, "\n");
-				}
+					if(count == 0)
+						exit(EXIT_SUCCESS);
 				}
 				else{
-					//exec_piped(commands);
-					exec_append(commands);
-
-				}	
-
+					char *argv[ARG_MAX_COUNT];
+					operation = 0;
+					option = 0;
+					for (int j = 0; j < commands->cmds[i]->argc; j++)
+					{
+						option = verify_parsing(commands->cmds[i]->argv[j]);
+						if(option == APPEND||option == OUTPUT||option == INPUT){
+							char* path = commands->cmds[i]->argv[j+1];
+							operation = j;
+							exec_redirect( path, argv, option);
+						}
+						else if(option == ASYNCRONOUS){
+							char* path = commands->cmds[i]->argv[j+1];
+							operation = j;
+							exec_async(argv, commands->cmds[i]->argc);
+						}
+						else{
+							if(!operation)
+								{argv[j] = commands->cmds[i]->argv[j];
+								fprintf(stdout, "arg[%d]: %s\n", j, argv[j]);}
+							
+						}
+					}
+					argv[operation] = NULL;
+				}
+					
+				if(operation == 0)
+					exec_command(commands->cmds[i]);
+			}
+				
+		}
 		
 
 		free(input);
@@ -427,4 +572,3 @@ int main(void)
 	
 }
 
-}
