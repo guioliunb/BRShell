@@ -73,6 +73,44 @@ void cleanup_and_exit(int status)
 	// exit(status);
 }
 
+struct commands *parse_batch_with_pipes(char *input)
+{
+	int commandCount = 0;
+	int i = 0;
+	char *token;
+	char *saveptr;
+	char *c = input;
+	struct commands *cmds;
+	operations = (int*) calloc(32,  sizeof(int));
+	int operation_number = 0;
+
+	while (*c != '\0')
+	{
+		if (*c == '|')
+			commandCount++;
+		c++;
+	}
+
+	cmds = (struct commands *)calloc(sizeof(struct commands) + commandCount * sizeof(struct commands *), 1);
+
+	if (cmds == NULL)
+	{
+		fprintf(stderr, "error: memory alloc error\n");
+		exit(EXIT_FAILURE);
+	}
+
+	token = strtok_r(input, "|", &saveptr);
+	while (token != NULL && i < commandCount)
+	{
+		cmds->cmds[i++] = parse(token);
+		token = strtok_r(NULL, "|", &saveptr);
+	}
+
+	cmds->cmd_count = commandCount;
+	return cmds;
+}
+
+
 struct commands *parse_commands_with_pipes(char *input)
 {
 	int commandCount = 0;
@@ -235,16 +273,17 @@ int check_built_in(struct command *cmd)
 		if(cmd->argv[1] != NULL && !is_blank(cmd->argv[1])){
 			historico_numero = atoi(cmd->argv[1]);
 			
-			if(historico_numero > 10 && historico_numero >=0)
+			if(historico_numero > history_len && historico_numero >=0){
 				historico_numero = history_len;
+				fprintf(stdout, "Comando fora do intervalo do historico\n");
+				}
 		}
 		else
 			historico_numero = history_len;
 
-
 		for (int i = 0; i < historico_numero; i++)
 		{
-			fprintf(stdout,"%s",history[i]);
+			fprintf(stdout,"%s",history[history_len-1-i]);
 			fprintf(stdout, "\n");
 		}
 
@@ -275,7 +314,7 @@ void close_pipes(int (*pipes)[2], int pipe_count)
 
 int exec_command(struct command *cmd){
 	
-	fprintf(stdout,"exc. %s", cmd->name);
+	fprintf(stdout,"\nexc. %s\n", cmd->name);
 	int pid = fork();
 	if (pid > 0)
 		wait(NULL);
@@ -480,7 +519,8 @@ int main(void)
 {
 	int exec_ret;
 	char c;
-	char* input_auxiliar;
+	int buffer_size = 2048;
+	char *input_auxiliar  = (char *)malloc(buffer_size * sizeof(char));
 
 	welcomeScreen();
 
@@ -495,7 +535,7 @@ int main(void)
 		fputs("$ ", stdout);
 
 		input = read_input();
-		input_auxiliar = input;
+		strcpy(input_auxiliar, input);
 
 		if (input == NULL)
 		{
@@ -510,9 +550,6 @@ int main(void)
 
 		if (strlen(input) > 0 && !is_blank(input) && input[0])
 		{
-
-
-			add_to_history(input);
 
 			struct commands *commands = parse_commands_with_pipes(input);
 			int operation = 0;
@@ -529,31 +566,114 @@ int main(void)
 						exit(EXIT_SUCCESS);
 				}
 				else{
+
+					add_to_history(input_auxiliar);
 					char *argv[ARG_MAX_COUNT];
 					operation = 0;
 					option = 0;
-					for (int j = 0; j < commands->cmds[i]->argc; j++)
-					{
-						option = verify_parsing(commands->cmds[i]->argv[j]);
-						if(option == APPEND||option == OUTPUT||option == INPUT){
-							char* path = commands->cmds[i]->argv[j+1];
-							operation = j;
-							exec_redirect( path, argv, option);
+
+					if(strstr(commands->cmds[i]->name, "./") || strstr(commands->cmds[i]->name, ".sh") ){
+						fprintf(stdout, "Arquivo em lote\n");
+						int fd;
+						char* path = cwd;
+						mode_t access = S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH;
+						
+
+						operation = -1;
+
+						FILE* filePointer;
+						int bufferLength = 1024;
+						char buffer[bufferLength]; /* not ISO 90 compatible */
+
+						filePointer = fopen(commands->cmds[i]->name, "r");
+
+						if(filePointer == NULL){
+							perror("cannot open file\n");
 						}
-						else if(option == ASYNCRONOUS){
-							char* path = commands->cmds[i]->argv[j+1];
-							operation = j;
-							exec_async(argv, commands->cmds[i]->argc);
+
+						struct commands *batch_commands;
+						
+						int c = 0;
+
+						while(fgets(buffer, bufferLength, filePointer)) {
+						
+						char new_path [strlen(buffer)];
+
+							if(c==0){
+								for(int i = 2 ; i < strlen(buffer); i++ ){
+									new_path[i- 2] = buffer[i];
+									if(c == '\n')
+										break;
+								}
+							}	
+
+						chdir(new_path);
+
+							if(buffer[0] != '#' && buffer[0] != '\n' && buffer[0] != '\0' && buffer[0] != EOF){
+								batch_commands = parse_commands_with_pipes(buffer);
+
+								int tamanho = batch_commands->cmds[0]->argc;
+								// batch_commands->cmds[0]->argv[tamanho-1] = NULL;
+
+								int tamanho_arg = strlen(batch_commands->cmds[0]->argv[tamanho-1]);
+
+								batch_commands->cmds[0]->argv[tamanho-1][tamanho_arg-1] = '\0';
+								
+								strcat(path, batch_commands->cmds[0]->name);
+
+								int pid = fork();
+								if (pid > 0)
+									wait(NULL);
+								else{
+									execvp(batch_commands->cmds[0]->argv[0],batch_commands->cmds[0]->argv);
+									exit(EXIT_FAILURE);
+								}
+
+
+
+								// for(int i = 0 ; i < batch_commands->cmd_count ; i++){
+
+								// 	add_to_history(buffer);
+								// 	exec_command(batch_commands->cmds[i]);
+									
+								// }
+								
+							}
+
+							c++;	
 						}
-						else{
-							if(!operation)
-								{argv[j] = commands->cmds[i]->argv[j];
-								fprintf(stdout, "arg[%d]: %s\n", j, argv[j]);}
-							
+
+						fclose(filePointer);
+
+
+
+
+					}else{
+						for (int j = 0; j < commands->cmds[i]->argc; j++)
+						{
+							option = verify_parsing(commands->cmds[i]->argv[j]);
+							if(option == APPEND||option == OUTPUT||option == INPUT){
+								char* path = commands->cmds[i]->argv[j+1];
+								operation = j;
+								exec_redirect( path, argv, option);
+							}
+							else if(option == ASYNCRONOUS){
+								char* path = commands->cmds[i]->argv[j+1];
+								operation = j;
+								exec_async(argv, commands->cmds[i]->argc);
+							}
+							else{
+								if(!operation)
+									{argv[j] = commands->cmds[i]->argv[j];
+									fprintf(stdout, "arg[%d]: %s\n", j, argv[j]);}
+								
+							}
 						}
+						argv[operation] = NULL;
 					}
-					argv[operation] = NULL;
 				}
+
+					
 					
 				if(operation == 0)
 					exec_command(commands->cmds[i]);
