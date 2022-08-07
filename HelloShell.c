@@ -16,6 +16,16 @@
 
 static char **history = NULL;
 static int history_len = 0;
+static int key_count = 0;
+
+struct key_value
+{
+   int key;
+   char* alias;
+   char* value;
+};
+
+static struct key_value mapa[1000];
 
 #define INPUT 0
 #define OUTPUT 1
@@ -149,6 +159,33 @@ struct commands *parse_commands_with_pipes(char *input)
 }
 
 struct command *parse(char *input)
+{
+
+	int tokenCount = 0;
+	char *token;
+
+	struct command *cmd = (struct command *)calloc(sizeof(struct command) + ARG_MAX_COUNT * sizeof(char *), 1);
+
+	if (cmd == NULL)
+	{
+		fprintf(stderr, "error: memory alloc error\n");
+		exit(1);
+	}
+
+	token = strtok(input, " ");
+
+	while (token != NULL && tokenCount < ARG_MAX_COUNT)
+	{
+		cmd->argv[tokenCount++] = token;
+		token = strtok(NULL, " ");
+	}
+	cmd->name = cmd->argv[0];
+	cmd->argc = tokenCount;
+	return cmd;
+}
+
+
+void *parseShr(char *input)
 {
 
 	int tokenCount = 0;
@@ -621,6 +658,46 @@ void welcomeScreen()
 	printf("\n\n");
 }
 
+void readAlias(){
+
+	FILE *filePointer;
+	int bufferLength = 1024;
+	char buffer[bufferLength]; 
+
+	filePointer = fopen("/home/guilherme/.BRshrc", "r");
+
+	if (filePointer == NULL)
+	{
+		perror("cannot open file\n");
+	}
+
+	int c = 0 ;
+
+	while (fgets(buffer, bufferLength, filePointer))
+	{
+		
+		struct command* token = parse(buffer);
+		int tokenCount = 0;
+		char* alias;
+		char* value;
+
+		if(strcmp(token->argv[0], "alias ")){
+			//fprintf(stdout, "%s\n", token->argv[1]);
+			alias =  strtok(token->argv[1], "=");			
+			value = strtok(NULL,"=");
+			
+
+			fprintf(stdout, "k:  %s\n", alias);
+			fprintf(stdout, "v:  %s\n", value);
+		}
+			 
+		
+
+		c++;
+	}
+
+}
+
 int main(void)
 {
 	int exec_ret;
@@ -629,162 +706,164 @@ int main(void)
 	char *input_auxiliar = (char *)malloc(buffer_size * sizeof(char));
 
 	welcomeScreen();
+	readAlias();
+	//command line arg >> env variable >> config file 
 
-	while (1)
-	{
+	// while (1)
+	// {
 
-		char cwd[1024];
-		if (getcwd(cwd, sizeof(cwd)) != NULL)
-			fprintf(stdout, "%s", cwd);
-		else
-			perror("User path failed\n");
+	// 	char cwd[1024];
+	// 	if (getcwd(cwd, sizeof(cwd)) != NULL)
+	// 		fprintf(stdout, "%s", cwd);
+	// 	else
+	// 		perror("User path failed\n");
 
-		fputs("$ ", stdout);
+	// 	fputs("$ ", stdout);
 
-		input = read_input();
-		strcpy(input_auxiliar, input);
+		
+	// }
 
-		if (input == NULL)
-		{
-			fprintf(stderr, "error: malloc failed\n");
-			// cleanup_and_exit(EXIT_FAILURE);
-		}
-		int i = 0;
+	// 	input = read_input();
+	// 	strcpy(input_auxiliar, input);
 
-		if (strchr(input, '|'))
-			fprintf(stdout, "%s ", input);
+	// 	if (input == NULL)
+	// 	{
+	// 		fprintf(stderr, "error: malloc failed\n");
+	// 		// cleanup_and_exit(EXIT_FAILURE);
+	// 	}
+	// 	int i = 0;
 
-		if (strlen(input) > 0 && !is_blank(input) && input[0])
-		{
+	// 	if (strchr(input, '|'))
+	// 		fprintf(stdout, "%s ", input);
 
-			struct commands *commands = parse_commands_with_pipes(input);
+	// 	if (strlen(input) > 0 && !is_blank(input) && input[0])
+	// 	{
 
-			if (commands->cmd_count > 1)
-			{
+	// 		struct commands *commands = parse_commands_with_pipes(input);
+
+	// 		if (commands->cmd_count > 1)
+	// 		{
 
 				
-				pid_t pid;
-				pid = fork();
-				if (pid < 0)
-					fprintf(stderr, "pipe error\n");
+	// 			pid_t pid;
+	// 			pid = fork();
+	// 			if (pid < 0)
+	// 				fprintf(stderr, "pipe error\n");
 
-				if (pid == 0)
-				{ // child1
-
-					
-
-					execution_piped(commands);
-					perror("execution piped error ");
-					exit(1); // in case exec is not successfull, exit
-				}
+	// 			if (pid == 0)
+	// 			{ // child1
+	// 				execution_piped(commands);
+	// 				perror("execution piped error ");
+	// 				exit(1); // in case exec is not successfull, exit
+	// 			}
 		
-				waitpid(pid, NULL, 0);
-			}
-			// TODO: ELSE
-			else
-			{
-				int built = check_built_in(commands->cmds[i]);
-				if (built != -1)
-				{
-					if (built == 0)
-						exit(EXIT_SUCCESS);
-				}
-				else
-				{
-					add_to_history(input_auxiliar);
-					char *argv[ARG_MAX_COUNT];
-					int operation = 0;
-					int option = 0;
+	// 			waitpid(pid, NULL, 0);
+	// 		}
+	// 		// TODO: ELSE
+	// 		else
+	// 		{
+	// 			int built = check_built_in(commands->cmds[i]);
+	// 			if (built != -1)
+	// 			{
+	// 				if (built == 0)
+	// 					exit(EXIT_SUCCESS);
+	// 			}
+	// 			else
+	// 			{
+	// 				add_to_history(input_auxiliar);
+	// 				char *argv[ARG_MAX_COUNT];
+	// 				int operation = 0;
+	// 				int option = 0;
 
-					if (strstr(commands->cmds[i]->name, "./"))
-					{
-						fprintf(stdout, "Arquivo em lote\n");
-						int fd;
-						char *path = cwd;
-						mode_t access = S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH;
+	// 				if (strstr(commands->cmds[i]->name, "./"))
+	// 				{
+	// 					fprintf(stdout, "Arquivo em lote\n");
+	// 					int fd;
+	// 					char *path = cwd;
+	// 					mode_t access = S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH;
 
-						operation = -1;
+	// 					operation = -1;
 
-						FILE *filePointer;
-						int bufferLength = 1024;
-						char buffer[bufferLength]; /* not ISO 90 compatible */
+	// 					FILE *filePointer;
+	// 					int bufferLength = 1024;
+	// 					char buffer[bufferLength]; /* not ISO 90 compatible */
 
-						filePointer = fopen(commands->cmds[i]->name, "r");
+	// 					filePointer = fopen(commands->cmds[i]->name, "r");
 
-						if (filePointer == NULL)
-						{
-							perror("cannot open file\n");
-						}
+	// 					if (filePointer == NULL)
+	// 					{
+	// 						perror("cannot open file\n");
+	// 					}
 
-						struct commands *batch_commands;
+	// 					struct commands *batch_commands;
 
-						int c = 0;
+	// 					int c = 0;
 
-						while (fgets(buffer, bufferLength, filePointer))
-						{
+	// 					while (fgets(buffer, bufferLength, filePointer))
+	// 					{
 
-							char new_path[strlen(buffer)];
+	// 						char new_path[strlen(buffer)];
 
-							if (c == 0)
-							{
-								for (int i = 2; i < strlen(buffer); i++)
-								{
-									new_path[i - 2] = buffer[i];
-									if (c == '\n')
-										break;
-								}
-							}
+	// 						if (c == 0)
+	// 						{
+	// 							for (int i = 2; i < strlen(buffer); i++)
+	// 							{
+	// 								new_path[i - 2] = buffer[i];
+	// 								if (c == '\n')
+	// 									break;
+	// 							}
+	// 						}
 
-							chdir(new_path);
+	// 						chdir(new_path);
 
-							if (buffer[0] != '#' && buffer[0] != '\n' && buffer[0] != '\0' && buffer[0] != EOF)
-							{
-								batch_commands = parse_commands_with_pipes(buffer);
+	// 						if (buffer[0] != '#' && buffer[0] != '\n' && buffer[0] != '\0' && buffer[0] != EOF)
+	// 						{
+	// 							batch_commands = parse_commands_with_pipes(buffer);
 
-								int tamanho = batch_commands->cmds[0]->argc;
-								// batch_commands->cmds[0]->argv[tamanho-1] = NULL;
+	// 							int tamanho = batch_commands->cmds[0]->argc;
+	// 							// batch_commands->cmds[0]->argv[tamanho-1] = NULL;
 
-								int tamanho_arg = strlen(batch_commands->cmds[0]->argv[tamanho - 1]);
+	// 							int tamanho_arg = strlen(batch_commands->cmds[0]->argv[tamanho - 1]);
 
-								batch_commands->cmds[0]->argv[tamanho - 1][tamanho_arg - 1] = '\0';
+	// 							batch_commands->cmds[0]->argv[tamanho - 1][tamanho_arg - 1] = '\0';
 
-								strcat(path, batch_commands->cmds[0]->name);
+	// 							strcat(path, batch_commands->cmds[0]->name);
 
-								int pid = fork();
-								if (pid > 0)
-									wait(NULL);
-								else
-								{
-									execvp(batch_commands->cmds[0]->argv[0], batch_commands->cmds[0]->argv);
-									exit(EXIT_FAILURE);
-								}
+	// 							int pid = fork();
+	// 							if (pid > 0)
+	// 								wait(NULL);
+	// 							else
+	// 							{
+	// 								execvp(batch_commands->cmds[0]->argv[0], batch_commands->cmds[0]->argv);
+	// 								exit(EXIT_FAILURE);
+	// 							}
 
-								// for(int i = 0 ; i < batch_commands->cmd_count ; i++){
+	// 							// for(int i = 0 ; i < batch_commands->cmd_count ; i++){
 
-								//  add_to_history(buffer);
-								//  exec_command(batch_commands->cmds[i]);
+	// 							//  add_to_history(buffer);
+	// 							//  exec_command(batch_commands->cmds[i]);
 
-								// }
-							}
+	// 							// }
+	// 						}
 
-							c++;
-						}
+	// 						c++;
+	// 					}
 
-						fclose(filePointer);
-					}
-					else
-					{
+	// 					fclose(filePointer);
+	// 				}
+	// 				else
+	// 				{
 
-						exec_command(commands->cmds[0]);
-					}
-				}
-			}
-		}
+	// 					exec_command(commands->cmds[0]);
+	// 				}
+	// 			}
+	// 		}
+	// 	}
 
-		free(input);
+	// 	free(input);
 
-		/* get ready to exit */
-		if (exec_ret == -1)
-			break;
-	}
+	// 	/* get ready to exit */
+	// 	if (exec_ret == -1)
+	// 		break;
+	// }
 }
