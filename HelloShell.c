@@ -348,10 +348,11 @@ int exec_command(struct command *cmd)
 		}
 	}
 	argv[operation] = NULL;
-	
+
 	int pid;
 
-	if(operation == 0){
+	if (operation == 0)
+	{
 		fprintf(stdout, "\nexc. %s\n", cmd->name);
 		int pid = fork();
 		if (pid > 0)
@@ -362,7 +363,6 @@ int exec_command(struct command *cmd)
 			exit(EXIT_FAILURE);
 		}
 	}
-	
 
 	return pid;
 }
@@ -621,8 +621,6 @@ void welcomeScreen()
 	printf("\n\n");
 }
 
-
-
 int main(void)
 {
 	int exec_ret;
@@ -662,101 +660,121 @@ int main(void)
 			struct commands *commands = parse_commands_with_pipes(input);
 
 			if (commands->cmd_count > 1)
-				execution_piped(commands);
+			{
+
+				
+				pid_t pid;
+				pid = fork();
+				if (pid < 0)
+					fprintf(stderr, "pipe error\n");
+
+				if (pid == 0)
+				{ // child1
+
+					
+
+					execution_piped(commands);
+					perror("execution piped error ");
+					exit(1); // in case exec is not successfull, exit
+				}
+		
+				waitpid(pid, NULL, 0);
+			}
 			// TODO: ELSE
 			else
 			{
 				int built = check_built_in(commands->cmds[i]);
-                if (built != -1)
-                {
-                    if (built == 0)
-                        exit(EXIT_SUCCESS);
-                }
+				if (built != -1)
+				{
+					if (built == 0)
+						exit(EXIT_SUCCESS);
+				}
 				else
 				{
 					add_to_history(input_auxiliar);
-                    char *argv[ARG_MAX_COUNT];
-                    int operation = 0;
-                    int option = 0;
+					char *argv[ARG_MAX_COUNT];
+					int operation = 0;
+					int option = 0;
 
 					if (strstr(commands->cmds[i]->name, "./"))
-                    {
-                        fprintf(stdout, "Arquivo em lote\n");
-                        int fd;
-                        char *path = cwd;
-                        mode_t access = S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH;
+					{
+						fprintf(stdout, "Arquivo em lote\n");
+						int fd;
+						char *path = cwd;
+						mode_t access = S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH;
 
-                        operation = -1;
+						operation = -1;
 
-                        FILE *filePointer;
-                        int bufferLength = 1024;
-                        char buffer[bufferLength]; /* not ISO 90 compatible */
+						FILE *filePointer;
+						int bufferLength = 1024;
+						char buffer[bufferLength]; /* not ISO 90 compatible */
 
-                        filePointer = fopen(commands->cmds[i]->name, "r");
+						filePointer = fopen(commands->cmds[i]->name, "r");
 
-                        if (filePointer == NULL)
-                        {
-                            perror("cannot open file\n");
-                        }
+						if (filePointer == NULL)
+						{
+							perror("cannot open file\n");
+						}
 
-                        struct commands *batch_commands;
+						struct commands *batch_commands;
 
-                        int c = 0;
+						int c = 0;
 
-                        while (fgets(buffer, bufferLength, filePointer))
-                        {
+						while (fgets(buffer, bufferLength, filePointer))
+						{
 
-                            char new_path[strlen(buffer)];
+							char new_path[strlen(buffer)];
 
-                            if (c == 0)
-                            {
-                                for (int i = 2; i < strlen(buffer); i++)
-                                {
-                                    new_path[i - 2] = buffer[i];
-                                    if (c == '\n')
-                                        break;
-                                }
-                            }
+							if (c == 0)
+							{
+								for (int i = 2; i < strlen(buffer); i++)
+								{
+									new_path[i - 2] = buffer[i];
+									if (c == '\n')
+										break;
+								}
+							}
 
-                            chdir(new_path);
+							chdir(new_path);
 
-                            if (buffer[0] != '#' && buffer[0] != '\n' && buffer[0] != '\0' && buffer[0] != EOF)
-                            {
-                                batch_commands = parse_commands_with_pipes(buffer);
+							if (buffer[0] != '#' && buffer[0] != '\n' && buffer[0] != '\0' && buffer[0] != EOF)
+							{
+								batch_commands = parse_commands_with_pipes(buffer);
 
-                                int tamanho = batch_commands->cmds[0]->argc;
-                                // batch_commands->cmds[0]->argv[tamanho-1] = NULL;
+								int tamanho = batch_commands->cmds[0]->argc;
+								// batch_commands->cmds[0]->argv[tamanho-1] = NULL;
 
-                                int tamanho_arg = strlen(batch_commands->cmds[0]->argv[tamanho - 1]);
+								int tamanho_arg = strlen(batch_commands->cmds[0]->argv[tamanho - 1]);
 
-                                batch_commands->cmds[0]->argv[tamanho - 1][tamanho_arg - 1] = '\0';
+								batch_commands->cmds[0]->argv[tamanho - 1][tamanho_arg - 1] = '\0';
 
-                                strcat(path, batch_commands->cmds[0]->name);
+								strcat(path, batch_commands->cmds[0]->name);
 
-                                int pid = fork();
-                                if (pid > 0)
-                                    wait(NULL);
-                                else
-                                {
-                                    execvp(batch_commands->cmds[0]->argv[0], batch_commands->cmds[0]->argv);
-                                    exit(EXIT_FAILURE);
-                                }
+								int pid = fork();
+								if (pid > 0)
+									wait(NULL);
+								else
+								{
+									execvp(batch_commands->cmds[0]->argv[0], batch_commands->cmds[0]->argv);
+									exit(EXIT_FAILURE);
+								}
 
-                                // for(int i = 0 ; i < batch_commands->cmd_count ; i++){
+								// for(int i = 0 ; i < batch_commands->cmd_count ; i++){
 
-                                //  add_to_history(buffer);
-                                //  exec_command(batch_commands->cmds[i]);
+								//  add_to_history(buffer);
+								//  exec_command(batch_commands->cmds[i]);
 
-                                // }
-                            }
+								// }
+							}
 
-                            c++;
-                        }
+							c++;
+						}
 
-                        fclose(filePointer);
-                    }
-					else{
-						
+						fclose(filePointer);
+					}
+					else
+					{
+
 						exec_command(commands->cmds[0]);
 					}
 				}
