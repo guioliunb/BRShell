@@ -12,3 +12,7 @@ struct commands {                  /* struct to store a command pipeline */
 	int cmd_count;             /* number of commands in the pipeline */
 	struct command *cmds[];    /* the commands themselves */
 };
+
+int verify_parsing(char *argv);
+void exec_redirect(char *path, char *argv[], int mode);
+void exec_async(char *argv[], int argc);
