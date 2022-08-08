@@ -126,7 +126,7 @@ struct commands *parse_commands_with_pipes(char *input)
 	operations = (int *)calloc(32, sizeof(int));
 	int operation_number = 0;
 
-	while (*c != '\0')
+	while (*c != '\0' )
 	{
 		if (*c == '|')
 			commandCount++;
@@ -409,7 +409,7 @@ int exec_command(struct command *cmd)
 
 		if (fork() == 0)
 		{
-			cmd->argv[cmd->argc - 1][tamanho - 1] = '\0';
+			
 			execvp(cmd->argv[0], cmd->argv);
 			exit(EXIT_FAILURE);
 		}
@@ -747,6 +747,7 @@ struct command *buscarAlias(char *input)
 		c++;
 	}
 
+	cmd->argc = -1;
 	return cmd;
 }
 
@@ -833,22 +834,14 @@ int main(void)
 		if (definicao->argv[0] != NULL)
 		{
 
-			fprintf(stdout, "traducao : %s\n", definicao->argv[0]);
+			fprintf(stdout, "Traducao : %s\n", definicao->argv[0]);
 
 			exec_command(definicao);
 		}
 		else{
 			fprintf(stdout, "Comando não encontrado \n");
 			fprintf(stdout, "Tentativa de substituir o arg name \n");
-			fprintf(stdout, "traducao 2 : %s\n", definicao->argv[0]);
-			struct command *definicao2 = buscarAlias(definicao->argv[0]);
-
-			if (definicao2->argv[0] != NULL){
-				definicao->argv[0] = definicao2->argv[0];
-				fprintf(stdout, "traducao 2 : %s\n", definicao->argv[0]);
-				exec_command(definicao);
-			}
-		
+	
 		}
 		// fprintf(stdout, "traducao : %s\n", definicao->argv[0]);
 		// fprintf(stdout, "traducao : %s\n", definicao->argv[1]);
@@ -926,6 +919,8 @@ int main(void)
 
 							char new_path[strlen(buffer)];
 
+							buffer[strcspn(buffer, "\n")] = 0;
+
 							if (c == 0)
 							{
 								for (int i = 2; i < strlen(buffer); i++)
@@ -946,8 +941,6 @@ int main(void)
 								// batch_commands->cmds[0]->argv[tamanho-1] = NULL;
 
 								int tamanho_arg = strlen(batch_commands->cmds[0]->argv[tamanho - 1]);
-
-								batch_commands->cmds[0]->argv[tamanho - 1][tamanho_arg - 1] = '\0';
 
 								strcat(path, batch_commands->cmds[0]->name);
 
@@ -975,6 +968,16 @@ int main(void)
 					}
 					else
 					{
+						fprintf(stdout, "estou : <\n");
+						struct command *definicao = buscarAlias(commands->cmds[0]->argv[0]);
+						if(definicao->argc>0)
+							{commands->cmds[0]->argv[0] =  definicao->argv[0];
+							int qtd_comandos = definicao->argc;
+							// int tamanho_comando = strlen(definicao->argv[qtd_comandos-1]);
+							// if(strchr(definicao->argv[qtd_comandos-1],'\n') )
+							definicao->argv[qtd_comandos-1][strcspn(definicao->argv[qtd_comandos-1],  "\n" )] = '\0';
+							fprintf(stdout, "trocado: %s\n", commands->cmds[0]->argv[0]);
+							}
 
 						exec_command(commands->cmds[0]);
 					}
