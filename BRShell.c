@@ -33,6 +33,13 @@ char *alias[1000];
 char *value[1000];
 char cwd[1024];
 
+void coleta(){
+	int pid;
+	int status;
+	while((pid == waitpid(-1, &status, 	WNOHANG))> 0){
+		fprintf(stdout, "\nColetado %d \n", pid);
+	}
+}
 int historico(char *input)
 {
 	const char *chave = "historico";
@@ -454,7 +461,7 @@ void exec_async(char *argv[], int argc)
 		fprintf(stdout, "&\n");
 	}
 
-	wait(NULL);
+	
 }
 
 int verify_parsing(char *argv)
@@ -766,6 +773,8 @@ int main(void)
 	{
 		usuario_diretorio();
 		fputs("$ ", stdout);
+
+		coleta();
 		int booli = 0;
 		boleano = 0;
 
