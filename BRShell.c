@@ -766,9 +766,12 @@ int main(void)
 	{
 		usuario_diretorio();
 		fputs("$ ", stdout);
+		int booli = 0;
 		boleano = 0;
 
 		input = ler_entrada();
+		if(strstr(input, "historico"));
+			booli = 1;
 
 		strcpy(input_auxiliar, input);
 		struct command *definicao = buscarAlias(input_auxiliar);
@@ -810,7 +813,8 @@ int main(void)
 
 			else if ((boleano == 0))
 			{
-				adicionar_na_historia(input_auxiliar);
+				if(!booli)
+					adicionar_na_historia(input_auxiliar);
 				char *argv[ARG_MAX_COUNT];
 				int operation = 0;
 				int option = 0;
