@@ -8,6 +8,7 @@
 #include <signal.h>
 #include <fcntl.h>
 #include "HelloShell.h"
+#include <unistd.h>
 
 #define GREEN "\x1b[32m"
 #define RED "\x1b[31m"
@@ -30,6 +31,7 @@ struct key_value map[100];
 #define PWD 6
 
 struct command *parse(char *input);
+struct command *buscarAlias(char *input);
 int is_blank(char *input);
 static char *input;
 static int *operations;
@@ -296,10 +298,23 @@ int check_built_in(struct command *cmd)
 	else if (strcmp(cmd->argv[0], "cd") == 0 || strcmp(cmd->argv[0], "cd\n") == 0)
 	{
 		// DUPLICAR METODO
-		fprintf(stdout, "entrou2 %s\n ", cmd->argv[1]);
-		chdir(cmd->argv[1]);
+		
+		// cmd->argv[1][strcspn(cmd->argv[1], "\n")] = '\0';
+		// cmd->argv[1][strcspn(cmd->argv[1], " ")] = '\0';
+		int tamanho = strlen(cmd->argv[1]);
+		cmd->argv[1][tamanho-1]= '\0';
+		char  buffer[100] = "/home/";
+		char name[50];
+		int login = getlogin_r(name, sizeof(name));
+		if(login==0)
+			strcat(buffer,name);
+		
+		strcat(buffer,cmd->argv[1]);
 
-		fprintf(stdout, "%s", cmd->argv[1]);
+		if(chdir(buffer)!=0){
+			fprintf(stdout, "\n%s\n", buffer);
+			perror("chdir() to failed");}
+		return 3;
 
 		return 1;
 	}
@@ -407,7 +422,7 @@ int exec_command(struct command *cmd)
 		
 		int tamanho = strlen(cmd->argv[cmd->argc - 1]);
 
-		if (fork() == 0)
+		if (fork() == 0 && built<=0)
 		{
 			
 			execvp(cmd->argv[0], cmd->argv);
@@ -545,6 +560,7 @@ void execution_piped(struct commands *cmds)
 	size_t i, n;
 	int prev_pipe, pfds[2];
 	prev_pipe = STDIN_FILENO;
+	
 
 	for (i = 0; i < cmds->cmd_count - 1; i++)
 	{
@@ -563,6 +579,16 @@ void execution_piped(struct commands *cmds)
 			dup2(pfds[1], STDOUT_FILENO);
 			close(pfds[1]);
 
+			//fprintf(stdout, "estou : <\n");
+			struct command *definicao = buscarAlias(cmds->cmds[i]->argv[0]);
+			if(definicao->argc>0)
+			{
+				//fprintf(stdout, "entrou aqui %s\n", cmds->cmds[i]->argv[0]);
+				cmds->cmds[i]->argv[0] =  definicao->argv[0];
+				int qtd_comandos = definicao->argc;
+				definicao->argv[qtd_comandos-1][strcspn(definicao->argv[qtd_comandos-1],  "\n" )] = '\0';
+				fprintf(stdout, "trocado: %s\n", cmds->cmds[i]->argv[0]);
+			}				
 			// Start command
 			execvp(cmds->cmds[i]->argv[0], cmds->cmds[i]->argv);
 
@@ -660,12 +686,14 @@ int exec_commands(struct commands *cmds)
 	return pid;
 }
 
+char cwd[1024];
+
 void shellPrompt()
 {
 	// We print the prompt in the form "<user>@<host> <cwd> >"
 	char hostn[1204] = "";
 	gethostname(hostn, sizeof(hostn));
-	// printf("%s@%s %s > ", getenv("LOGNAME"), hostn, getcwd(currentDirectory, 1024));
+	fprintf(stdout, "%s@%s %s > ", getenv("LOGNAME"), hostn, getcwd(cwd, 1024));
 }
 
 void welcomeScreen()
@@ -729,7 +757,6 @@ struct command *buscarAlias(char *input)
 				}
 				else
 				{
-					fprintf(stdout, "token para caso simples %s\n", token->argv[1]);
 					cmd->argv[1] = token->argv[2];
 					cmd->argc = 1;
 				}
@@ -806,10 +833,17 @@ int main(void)
 	int exec_ret;
 	char c;
 	int buffer_size = 2048;
+	int boleano = 0;
 	char *input_auxiliar = (char *)malloc(buffer_size * sizeof(char));
 
 	welcomeScreen();
 	readAlias();
+
+	// char cwd[1024];
+	// if (getcwd(cwd, sizeof(cwd)) != NULL)
+	// 	fprintf(stdout, "%s", cwd);
+	// else
+	// 	perror("User path failed\n");
 
 	//fprintf(stdout, "contador %d \n", key_count);
 
@@ -818,13 +852,10 @@ int main(void)
 	while (1)
 	{
 
-		char cwd[1024];
-		if (getcwd(cwd, sizeof(cwd)) != NULL)
-			fprintf(stdout, "%s", cwd);
-		else
-			perror("User path failed\n");
-
+		
+		shellPrompt();
 		fputs("$ ", stdout);
+		boleano = 0;
 
 		input = read_input();
 
@@ -835,7 +866,7 @@ int main(void)
 		{
 
 			fprintf(stdout, "Traducao : %s\n", definicao->argv[0]);
-
+			boleano = 1;
 			exec_command(definicao);
 		}
 		else{
@@ -852,12 +883,12 @@ int main(void)
 		}
 		int i = 0;
 
-		if (strlen(input) > 0 && !is_blank(input) && input[0])
+		if (strlen(input) > 0 && !is_blank(input) && input[0] && (boleano==0))
 		{
 
 			struct commands *commands = parse_commands_with_pipes(input);
-
-			if (commands->cmd_count > 1)
+			fprintf(stdout,"command count %d \n" , commands->cmd_count);
+			if (commands->cmd_count > 1 )
 			{
 
 				pid_t pid;
@@ -875,16 +906,8 @@ int main(void)
 				waitpid(pid, NULL, 0);
 			}
 			// TODO: ELSE
-			else
+			else if((boleano==0))
 			{
-				int built = check_built_in(commands->cmds[i]);
-				if (built != -1)
-				{
-					if (built == 0)
-						exit(EXIT_SUCCESS);
-				}
-				else
-				{
 					add_to_history(input_auxiliar);
 					char *argv[ARG_MAX_COUNT];
 					int operation = 0;
@@ -968,7 +991,7 @@ int main(void)
 					}
 					else
 					{
-						fprintf(stdout, "estou : <\n");
+						
 						struct command *definicao = buscarAlias(commands->cmds[0]->argv[0]);
 						if(definicao->argc>0)
 							{commands->cmds[0]->argv[0] =  definicao->argv[0];
@@ -981,7 +1004,7 @@ int main(void)
 
 						exec_command(commands->cmds[0]);
 					}
-				}
+				
 			}
 		}
 
