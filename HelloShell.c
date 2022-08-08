@@ -289,7 +289,28 @@ void showHelp()
 	printf(BLUE "Redirecionar o ano (APPEND) para o arquivo: ls >> fileOutput " RESET "\n");
 	printf(BLUE "Redirecionar a entrada (INPUT): para o arquivO:  wc -c < fileInput " RESET "\n");
 }
-
+char* substr(const char *src, int m, int n)
+{
+    // get the length of the destination string
+    int len = n - m;
+ 
+    // allocate (len + 1) chars for destination (+1 for extra null character)
+    char *dest = (char*)malloc(sizeof(char) * (len + 1));
+ 
+    // extracts characters between m'th and n'th index from source string
+    // and copy them into the destination string
+    for (int i = m; i < n && (*(src + i) != '\0'); i++)
+    {
+        *dest = *(src + i);
+        dest++;
+    }
+ 
+    // null-terminate the destination string
+    *dest = '\0';
+ 
+    // return the destination string
+    return dest - len;
+}
 int check_built_in(struct command *cmd)
 {
 
@@ -310,18 +331,22 @@ int check_built_in(struct command *cmd)
 			int login = getlogin_r(name, sizeof(name));
 			if(login==0)
 				strcat(buffer,name);
+
+			char *path = substr(cmd->argv[1], 1, strlen(cmd->argv[1]));
 		
-			strcat(buffer,cmd->argv[1]);
+			strcat(buffer,path);
 		}
 		else{
 
 			strcpy(buffer,  "" );
 			getcwd(buffer, 200);
 			strcat(buffer,cmd->argv[1]);
+
+			fprintf(stdout, "AQUI %s\n", buffer);
 		}
 
 		if(chdir(buffer)!=0){
-			fprintf(stdout, "\n%s\n", buffer);
+			fprintf(stdout, "%s\n", buffer);
 			perror("chdir() to failed");}
 		return 3;
 
