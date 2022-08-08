@@ -13,6 +13,13 @@ struct commands {                  /* struct to store a command pipeline */
 	struct command *cmds[];    /* the commands themselves */
 };
 
+struct key_value
+{
+   int key;
+   char* alias;
+   char* value;
+};
+
 int verify_parsing(char *argv);
 void exec_redirect(char *path, char *argv[], int mode);
 void exec_async(char *argv[], int argc);
