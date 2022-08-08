@@ -301,15 +301,24 @@ int check_built_in(struct command *cmd)
 		
 		// cmd->argv[1][strcspn(cmd->argv[1], "\n")] = '\0';
 		// cmd->argv[1][strcspn(cmd->argv[1], " ")] = '\0';
-		int tamanho = strlen(cmd->argv[1]);
-		cmd->argv[1][tamanho-1]= '\0';
-		char  buffer[100] = "/home/";
-		char name[50];
-		int login = getlogin_r(name, sizeof(name));
-		if(login==0)
-			strcat(buffer,name);
+		char  buffer[200];
+		if(strstr(cmd->argv[1], "~/") ){
+			int tamanho = strlen(cmd->argv[1]);
+			cmd->argv[1][tamanho-1]= '\0';
+			strcpy(buffer,  "/home/" );
+			char name[50];
+			int login = getlogin_r(name, sizeof(name));
+			if(login==0)
+				strcat(buffer,name);
 		
-		strcat(buffer,cmd->argv[1]);
+			strcat(buffer,cmd->argv[1]);
+		}
+		else{
+
+			strcpy(buffer,  "" );
+			getcwd(buffer, 200);
+			strcat(buffer,cmd->argv[1]);
+		}
 
 		if(chdir(buffer)!=0){
 			fprintf(stdout, "\n%s\n", buffer);
